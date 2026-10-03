@@ -1,0 +1,239 @@
+name: Build PathDetector APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create Android project
+        shell: bash
+        run: |
+          mkdir -p app/src/main/java/com/example/pathdetector
+          mkdir -p app/src/main/res/values
+
+          cat > settings.gradle.kts <<'EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+
+          rootProject.name = "PathDetector"
+          include(":app")
+          EOF
+
+          cat > build.gradle.kts <<'EOF'
+          plugins {
+              id("com.android.application") version "8.6.1" apply false
+          }
+          EOF
+
+          cat > gradle.properties <<'EOF'
+          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+          android.useAndroidX=true
+          EOF
+
+          cat > app/build.gradle.kts <<'EOF'
+          plugins {
+              id("com.android.application")
+          }
+
+          android {
+              namespace = "com.example.pathdetector"
+              compileSdk = 35
+
+              defaultConfig {
+                  applicationId = "com.example.pathdetector"
+                  minSdk = 26
+                  targetSdk = 35
+                  versionCode = 1
+                  versionName = "1.0"
+              }
+
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+          }
+          EOF
+
+          cat > app/src/main/AndroidManifest.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+              <application
+                  android:allowBackup="false"
+                  android:label="路径检测器"
+                  android:supportsRtl="true"
+                  android:theme="@style/AppTheme">
+
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true">
+
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+
+                  </activity>
+
+              </application>
+
+          </manifest>
+          EOF
+
+          cat > app/src/main/res/values/styles.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+
+              <style name="AppTheme"
+                  parent="android:style/Theme.Material.Light.NoActionBar">
+
+                  <item name="android:fontFamily">sans</item>
+                  <item name="android:colorAccent">#3F51B5</item>
+                  <item name="android:navigationBarColor">#FFFFFF</item>
+                  <item name="android:statusBarColor">#FFFFFF</item>
+                  <item name="android:windowLightStatusBar">true</item>
+
+              </style>
+
+          </resources>
+          EOF
+
+          cat > app/src/main/java/com/example/pathdetector/MainActivity.java <<'EOF'
+          package com.example.pathdetector;
+
+          import android.app.Activity;
+          import android.os.Bundle;
+          import android.graphics.Color;
+          import android.graphics.Typeface;
+          import android.view.Gravity;
+          import android.widget.LinearLayout;
+          import android.widget.ScrollView;
+          import android.widget.TextView;
+
+          import java.io.File;
+
+          public class MainActivity extends Activity {
+
+              private final String[] paths = {
+                  "/data/adb",
+                  "/data/adb/modules",
+                  "/data/adb/ksu",
+                  "/data/adb/lspd",
+                  "/data/adb/service.d",
+                  "/data/adb/post-fs-data.d",
+                  "/system/xbin/su",
+                  "/system/bin/su",
+                  "/vendor/bin",
+                  "/product/app",
+                  "/product/priv-app",
+                  "/odm/bin",
+                  "/storage/emulated/0/Android/data"
+              };
+
+              @Override
+              protected void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+
+                  ScrollView scrollView = new ScrollView(this);
+
+                  LinearLayout layout = new LinearLayout(this);
+                  layout.setOrientation(LinearLayout.VERTICAL);
+                  layout.setPadding(32, 40, 32, 40);
+
+                  TextView title = new TextView(this);
+                  title.setText("路径检测器");
+                  title.setTextSize(28);
+                  title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+                  title.setTextColor(Color.BLACK);
+                  title.setGravity(Gravity.CENTER);
+                  layout.addView(title);
+
+                  TextView subtitle = new TextView(this);
+                  subtitle.setText(
+                      "Android 常见路径检测工具\n" +
+                      "仅检测路径是否存在，不修改、不删除任何文件"
+                  );
+                  subtitle.setTextSize(16);
+                  subtitle.setTextColor(Color.DKGRAY);
+                  subtitle.setGravity(Gravity.CENTER);
+                  subtitle.setPadding(0, 16, 0, 30);
+                  layout.addView(subtitle);
+
+                  for (String path : paths) {
+
+                      File file = new File(path);
+
+                      TextView result = new TextView(this);
+
+                      if (file.exists()) {
+                          result.setText("✓ 存在\n" + path);
+                          result.setTextColor(Color.rgb(0, 120, 0));
+                      } else {
+                          result.setText("✗ 不存在或不可访问\n" + path);
+                          result.setTextColor(Color.DKGRAY);
+                      }
+
+                      result.setTextSize(15);
+                      result.setPadding(20, 18, 20, 18);
+
+                      layout.addView(result);
+                  }
+
+                  TextView warning = new TextView(this);
+                  warning.setText(
+                      "\n说明：普通 Android 应用受到系统沙盒限制。" +
+                      "对于 /data/adb 等受保护目录，显示“不可访问”并不一定代表目录不存在。"
+                  );
+                  warning.setTextSize(14);
+                  warning.setTextColor(Color.GRAY);
+                  warning.setPadding(0, 20, 0, 0);
+
+                  layout.addView(warning);
+
+                  scrollView.addView(layout);
+                  setContentView(scrollView);
+              }
+          }
+          EOF
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.7"
+
+      - name: Build APK
+        run: gradle :app:assembleDebug --no-daemon
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: PathDetector-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
